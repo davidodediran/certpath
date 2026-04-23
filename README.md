@@ -3,9 +3,37 @@
 > An open-source AWS certification exam preparation platform built for training organisations, bootcamps, and self-learners.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com)
+[![Issues](https://img.shields.io/github/issues/davidodediran/certpath)](https://github.com/davidodediran/certpath/issues)
 
 CertPath lets students practice and sit timed mock exams for AWS certifications (Cloud Practitioner, Solutions Architect, and more). Teachers manage cohorts and upload questions; admins oversee the platform; a superuser manages everything at the top level.
+
+---
+
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><strong>Student Login</strong></td>
+    <td align="center"><strong>Exam Result</strong></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/student-login.png" alt="Student login page" width="400"/></td>
+    <td><img src="docs/screenshots/exam-result.png" alt="Exam result scorecard" width="400"/></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Teacher Dashboard — Students</strong></td>
+    <td align="center"><strong>Teacher Dashboard — Results</strong></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/teacher-students.png" alt="Teacher dashboard students tab" width="400"/></td>
+    <td><img src="docs/screenshots/teacher-results.png" alt="Teacher dashboard results tab" width="400"/></td>
+  </tr>
+</table>
 
 ---
 
@@ -164,6 +192,8 @@ certpath/
 │       ├── routes/             # auth, exams, teacher, admin, superuser…
 │       ├── db/                 # Knex connection + migrations
 │       └── middleware/
+├── docs/
+│   └── screenshots/            # App screenshots used in README
 ├── scripts/
 │   └── ec2-setup.sh            # EC2 UserData bootstrap
 ├── Dockerfile
@@ -185,9 +215,21 @@ Quick summary:
 
 ---
 
+## Security
+
+To report a vulnerability, please follow our [responsible disclosure policy](SECURITY.md). Do **not** open a public GitHub issue for security bugs.
+
+---
+
 ## Code of Conduct
 
 This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating you agree to uphold it.
+
+---
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a full history of releases.
 
 ---
 
