@@ -22,11 +22,14 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       DATABASE_URL: postgres://examuser:exampass@db:5432/examapp
-      JWT_SECRET: change-this-secret-in-production-min-32-chars
-      ADMIN_EMAIL: admin@examapp.com
+      JWT_SECRET: dev-secret-change-this-in-production-min-32-chars
       PORT: 3001
+      ADMIN_EMAIL: admin@localhost.dev
+      ADMIN_PASSWORD: admin1234
+      SUPER_EMAIL: super@localhost.dev
+      SUPER_PASSWORD: super1234
     volumes:
       - uploads_data:/app/uploads
       - ./backend/data:/app/data
