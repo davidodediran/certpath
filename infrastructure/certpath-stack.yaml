@@ -1,0 +1,786 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  CertPath Exam App — EC2 Auto Scaling Group behind an Application Load Balancer.
+  EC2 instances accept inbound traffic ONLY from the ALB security group.
+  External PostgreSQL endpoint is provided as a parameter (Supabase, RDS, self-hosted, etc.).
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONSOLE GROUPING
+# ─────────────────────────────────────────────────────────────────────────────
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "Network" }
+        Parameters: [VpcCIDR, PublicSubnet1CIDR, PublicSubnet2CIDR]
+      - Label: { default: "EC2 / Launch Template" }
+        Parameters: [InstanceType, KeyPairName, AppPort]
+      - Label: { default: "Application" }
+        Parameters: [GitHubRepo, GitHubBranch, GitHubToken, NodeEnv, JWTSecret]
+      - Label: { default: "Database  (external endpoint only)" }
+        Parameters: [DBEndpoint, DBPort, DBName, DBUser, DBPassword]
+      - Label: { default: "Auto Scaling" }
+        Parameters: [MinInstances, MaxInstances, DesiredInstances]
+      - Label: { default: "HTTPS  (optional — leave blank for HTTP)" }
+        Parameters: [CertificateArn]
+      - Label: { default: "SSM Session Manager  (optional)" }
+        Parameters: [EnableSSMRole]
+    ParameterLabels:
+      VpcCIDR:           { default: "VPC CIDR block" }
+      PublicSubnet1CIDR: { default: "Public Subnet 1 CIDR  (AZ-a)" }
+      PublicSubnet2CIDR: { default: "Public Subnet 2 CIDR  (AZ-b)" }
+      InstanceType:      { default: "EC2 instance type" }
+      KeyPairName:       { default: "EC2 Key Pair  (optional — SSH access)" }
+      AppPort:           { default: "Node.js app port" }
+      GitHubRepo:        { default: "GitHub repo  (owner/repo)" }
+      GitHubBranch:      { default: "Branch to deploy" }
+      GitHubToken:       { default: "GitHub token  (optional — private repos)" }
+      NodeEnv:           { default: "NODE_ENV value" }
+      JWTSecret:         { default: "JWT signing secret  (min 32 chars)" }
+      DBEndpoint:        { default: "PostgreSQL host / endpoint" }
+      DBPort:            { default: "PostgreSQL port  (5432 direct / 6543 pooler)" }
+      DBName:            { default: "Database name" }
+      DBUser:            { default: "Database username" }
+      DBPassword:        { default: "Database password" }
+      MinInstances:      { default: "Minimum instances" }
+      MaxInstances:      { default: "Maximum instances" }
+      DesiredInstances:  { default: "Desired instances" }
+      CertificateArn:    { default: "ACM Certificate ARN" }
+      EnableSSMRole:     { default: "Enable SSM Session Manager" }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PARAMETERS
+# ─────────────────────────────────────────────────────────────────────────────
+Parameters:
+
+  # ── Network ───────────────────────────────────────────────────────────────
+  VpcCIDR:
+    Type: String
+    Default: "10.0.0.0/16"
+    AllowedPattern: "^(\\d{1,3}\\.){3}\\d{1,3}/\\d{1,2}$"
+    Description: CIDR block for the new VPC
+
+  PublicSubnet1CIDR:
+    Type: String
+    Default: "10.0.1.0/24"
+    AllowedPattern: "^(\\d{1,3}\\.){3}\\d{1,3}/\\d{1,2}$"
+    Description: CIDR for public subnet in the first Availability Zone
+
+  PublicSubnet2CIDR:
+    Type: String
+    Default: "10.0.2.0/24"
+    AllowedPattern: "^(\\d{1,3}\\.){3}\\d{1,3}/\\d{1,2}$"
+    Description: CIDR for public subnet in the second Availability Zone
+
+  # ── EC2 ───────────────────────────────────────────────────────────────────
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+      - t3a.micro
+      - t3a.small
+      - t3a.medium
+    Description: "EC2 instance type. t2.micro is free-tier eligible (750 hrs/month)."
+
+  KeyPairName:
+    Type: String
+    Default: ""
+    Description: >-
+      (Optional) EC2 Key Pair for SSH access. Leave blank to disable SSH.
+      SSM Session Manager is recommended instead when EnableSSMRole = true.
+
+  AppPort:
+    Type: Number
+    Default: 5000
+    MinValue: 1
+    MaxValue: 65535
+    Description: TCP port the Node.js backend listens on
+
+  # ── Application ───────────────────────────────────────────────────────────
+  GitHubRepo:
+    Type: String
+    Description: "GitHub repo in owner/repo format  e.g. davidodediran/certpath"
+
+  GitHubBranch:
+    Type: String
+    Default: main
+    Description: Branch to clone and deploy
+
+  GitHubToken:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: "(Optional) GitHub Personal Access Token for private repositories"
+
+  NodeEnv:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+    Description: Written as NODE_ENV into the app .env file
+
+  JWTSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    Description: >-
+      JWT signing secret — minimum 32 characters.
+      IMPORTANT: avoid the $ character in this value.
+
+  # ── Database ──────────────────────────────────────────────────────────────
+  DBEndpoint:
+    Type: String
+    Description: >-
+      PostgreSQL host / endpoint only — no port or path.
+      Examples: db.xxxx.supabase.co | xxxx.region.rds.amazonaws.com | 10.0.0.5
+
+  DBPort:
+    Type: Number
+    Default: 5432
+    MinValue: 1024
+    MaxValue: 65535
+    Description: "PostgreSQL port  (default 5432;  Supabase transaction pooler: 6543)"
+
+  DBName:
+    Type: String
+    Default: postgres
+    Description: Database / schema name
+
+  DBUser:
+    Type: String
+    Default: postgres
+    Description: Database username
+
+  DBPassword:
+    Type: String
+    NoEcho: true
+    Description: >-
+      Database password.
+      IMPORTANT: avoid the $ character in this value.
+
+  # ── Auto Scaling ──────────────────────────────────────────────────────────
+  MinInstances:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    Description: Minimum number of EC2 instances the ASG will maintain
+
+  MaxInstances:
+    Type: Number
+    Default: 3
+    MinValue: 1
+    Description: Maximum number of EC2 instances the ASG may launch
+
+  DesiredInstances:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    Description: Starting desired instance count
+
+  # ── HTTPS ─────────────────────────────────────────────────────────────────
+  CertificateArn:
+    Type: String
+    Default: ""
+    Description: >-
+      (Optional) ACM Certificate ARN for HTTPS on port 443.
+      When provided port 80 redirects to 443. Leave blank for HTTP-only.
+
+  # ── SSM ───────────────────────────────────────────────────────────────────
+  EnableSSMRole:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      Attach AmazonSSMManagedInstanceCore to the instance role, enabling
+      AWS Systems Manager Session Manager (shell access without SSH or open ports).
+      Recommended: true.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONDITIONS
+# ─────────────────────────────────────────────────────────────────────────────
+Conditions:
+  HasCertificate: !Not [!Equals [!Ref CertificateArn, ""]]
+  HasKeyPair:     !Not [!Equals [!Ref KeyPairName, ""]]
+  HasGitHubToken: !Not [!Equals [!Ref GitHubToken, ""]]
+  SSMEnabled:     !Equals [!Ref EnableSSMRole, "true"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RESOURCES
+# ─────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # VPC + NETWORKING
+  # ══════════════════════════════════════════════════════════════════════════
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-vpc"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-igw"
+
+  IGWAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet1CIDR
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public-1"
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet2CIDR
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public-2"
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-rt-public"
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IGWAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref InternetGateway
+
+  Subnet1RTAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  Subnet2RTAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # SECURITY GROUPS
+  # ══════════════════════════════════════════════════════════════════════════
+
+  # ALB — internet-facing, accepts HTTP (+ HTTPS when cert is present)
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "ALB: HTTP/HTTPS inbound from internet"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - Description: "HTTP from internet"
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: "0.0.0.0/0"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg-alb"
+
+  # Conditional HTTPS rules — added only when a cert ARN is supplied
+  ALBSGIngressHTTPSv4:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasCertificate
+    Properties:
+      GroupId: !Ref ALBSecurityGroup
+      Description: "HTTPS from internet (IPv4)"
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: "0.0.0.0/0"
+
+  # EC2 — inbound ONLY from the ALB security group (not from the internet)
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "EC2 instances: app port inbound from ALB only"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - Description: "App traffic from ALB security group only"
+          IpProtocol: tcp
+          FromPort: !Ref AppPort
+          ToPort: !Ref AppPort
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg-ec2"
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # IAM — Instance Role + Profile
+  # ══════════════════════════════════════════════════════════════════════════
+
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-ec2-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      # SSM policy is conditional; CloudWatch agent policy is always included
+      ManagedPolicyArns:
+        - !If
+          - SSMEnabled
+          - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+          - !Ref AWS::NoValue
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - PolicyName: CloudFormationSignal
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:SignalResource
+                  - cloudformation:DescribeStackResource
+                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-ec2-role"
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${AWS::StackName}-ec2-profile"
+      Roles:
+        - !Ref EC2InstanceRole
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # LAUNCH TEMPLATE
+  # ══════════════════════════════════════════════════════════════════════════
+
+  EC2LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "${AWS::StackName}-lt"
+      LaunchTemplateData:
+        # Always uses the latest Amazon Linux 2023 AMI — no hard-coded AMI ID
+        ImageId: "{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64}}"
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile:
+          Arn: !GetAtt EC2InstanceProfile.Arn
+        KeyName: !If [HasKeyPair, !Ref KeyPairName, !Ref AWS::NoValue]
+        SecurityGroupIds:
+          - !Ref EC2SecurityGroup
+        MetadataOptions:
+          HttpTokens: required          # IMDSv2 only — security best practice
+          HttpPutResponseHopLimit: 1
+        Monitoring:
+          Enabled: true                 # detailed 1-minute CloudWatch metrics
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: 20            # 20 GB root — enough for Node + frontend build
+              VolumeType: gp3
+              Encrypted: true
+              DeleteOnTermination: true
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub "${AWS::StackName}-instance"
+              - Key: Stack
+                Value: !Ref AWS::StackName
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub "${AWS::StackName}-volume"
+        UserData:
+          Fn::Base64:
+            !Sub
+              - |
+                #!/bin/bash
+                # Note: NO 'set -euo pipefail' at the top level — we handle errors manually
+                # so the cfn-signal trap is ALWAYS registered before anything else runs.
+
+                # ── Redirect all output to log file AND EC2 system console ──
+                # The system console output is readable from the EC2 console
+                # Actions → Monitor and Troubleshoot → Get System Log
+                exec > >(tee /var/log/userdata.log /dev/console) 2>&1
+                echo "=== CertPath bootstrap started: $(date) ==="
+
+                # ── Install cfn-bootstrap FIRST, before anything else ─────
+                # We need cfn-signal available so we can always report status.
+                dnf install -y aws-cfn-bootstrap || true
+                # Also try pip3 as fallback in case dnf package is missing
+                if ! command -v cfn-signal &>/dev/null; then
+                  pip3 install --quiet aws-cfn-bootstrap || true
+                fi
+                # Locate cfn-signal across known AL2 / AL2023 paths
+                CFN_SIGNAL=""
+                for p in /opt/aws/bin/cfn-signal /usr/bin/cfn-signal /usr/local/bin/cfn-signal; do
+                  if [ -x "$p" ]; then CFN_SIGNAL="$p"; break; fi
+                done
+                echo "cfn-signal path: $CFN_SIGNAL"
+
+                # ── Register EXIT trap NOW — before any command that can fail ──
+                BOOTSTRAP_RESULT=0
+                signal_cfn() {
+                  echo "=== Sending cfn-signal (result=$BOOTSTRAP_RESULT) at $(date) ==="
+                  if [ -n "$CFN_SIGNAL" ]; then
+                    "$CFN_SIGNAL" -e "$BOOTSTRAP_RESULT" \
+                      --stack  '${AWS::StackName}' \
+                      --resource AutoScalingGroup \
+                      --region '${AWS::Region}' || true
+                  fi
+                }
+                trap signal_cfn EXIT
+
+                # ── Helper: run a step and abort with failure on error ─────
+                run_step() {
+                  echo "--- $1 ---"
+                  shift
+                  if ! "$@"; then
+                    echo "FAILED: $*"
+                    BOOTSTRAP_RESULT=1
+                    exit 1
+                  fi
+                }
+
+                # ── Add 1 GB swap (prevents OOM during npm build on t2.micro) ──
+                if [ ! -f /swapfile ]; then
+                  echo "=== Creating swap file ==="
+                  fallocate -l 1G /swapfile || dd if=/dev/zero of=/swapfile bs=128M count=8
+                  chmod 600 /swapfile
+                  mkswap /swapfile
+                  swapon /swapfile
+                  echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
+                  echo "Swap enabled: $(free -h | grep Swap)"
+                fi
+
+                # ── System update + base packages ─────────────────────────
+                run_step "System update"     dnf update -y
+                run_step "Install git/curl"  dnf install -y git curl
+
+                # ── Node.js 20 via NodeSource ──────────────────────────────
+                run_step "NodeSource setup"  bash -c "curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -"
+                run_step "Install Node.js"   dnf install -y nodejs
+                echo "Node: $(node --version)  npm: $(npm --version)"
+
+                # ── PM2 ────────────────────────────────────────────────────
+                run_step "Install PM2"  npm install -g pm2
+
+                # ── Clone / update repository ──────────────────────────────
+                APP_DIR=/opt/certpath
+                if [ -d "$APP_DIR/.git" ]; then
+                  echo "=== Updating existing clone ==="
+                  cd $APP_DIR
+                  git fetch origin
+                  git checkout ${GitHubBranch}
+                  git reset --hard origin/${GitHubBranch}
+                else
+                  echo "=== Cloning repository ==="
+                  if [ -n "${GitHubTokenValue}" ]; then
+                    git clone -b ${GitHubBranch} \
+                      "https://${GitHubTokenValue}@github.com/${GitHubRepo}.git" "$APP_DIR"
+                  else
+                    git clone -b ${GitHubBranch} \
+                      "https://github.com/${GitHubRepo}.git" "$APP_DIR"
+                  fi
+                fi
+
+                # ── Build React frontend (cap Node memory to avoid OOM) ────
+                export NODE_OPTIONS="--max-old-space-size=768"
+                run_step "Frontend npm ci"    bash -c "cd $APP_DIR/frontend && npm ci"
+                run_step "Frontend npm build" bash -c "cd $APP_DIR/frontend && npm run build"
+                unset NODE_OPTIONS
+
+                # ── Backend dependencies ───────────────────────────────────
+                run_step "Backend npm ci" bash -c "cd $APP_DIR/backend && npm ci"
+
+                # ── Write .env (avoid $ in password / JWT secret values) ───
+                ENV_FILE="$APP_DIR/backend/.env"
+                printf 'NODE_ENV=%s\n'    '${NodeEnv}'   > "$ENV_FILE"
+                printf 'PORT=%s\n'        '${AppPort}'  >> "$ENV_FILE"
+                printf 'DATABASE_URL=postgresql://%s:%s@%s:%s/%s?sslmode=require\n' \
+                  '${DBUser}' '${DBPassword}' '${DBEndpoint}' '${DBPort}' '${DBName}' >> "$ENV_FILE"
+                printf 'JWT_SECRET=%s\n'  '${JWTSecret}' >> "$ENV_FILE"
+                chmod 600 "$ENV_FILE"
+
+                # ── Start app with PM2 ─────────────────────────────────────
+                cd $APP_DIR/backend
+                if pm2 describe certpath > /dev/null 2>&1; then
+                  pm2 reload certpath --update-env
+                else
+                  pm2 start src/index.js --name certpath
+                fi
+                env PATH=$PATH:/usr/bin pm2 startup systemd -u root --hp /root | bash || true
+                pm2 save
+
+                echo "=== CertPath bootstrap COMPLETE: $(date) ==="
+                BOOTSTRAP_RESULT=0
+              - GitHubTokenValue: !If [HasGitHubToken, !Ref GitHubToken, ""]
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # APPLICATION LOAD BALANCER
+  # ══════════════════════════════════════════════════════════════════════════
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn: IGWAttachment
+    Properties:
+      Name: !Sub "${AWS::StackName}-alb"
+      Scheme: internet-facing
+      Type: application
+      IpAddressType: ipv4
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: "60"
+        - Key: routing.http.drop_invalid_header_fields.enabled
+          Value: "true"
+        - Key: deletion_protection.enabled
+          Value: "false"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-alb"
+
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${AWS::StackName}-tg"
+      Protocol: HTTP
+      Port: !Ref AppPort
+      TargetType: instance
+      VpcId: !Ref VPC
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: "200-399"
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "30"
+        - Key: stickiness.enabled
+          Value: "false"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-tg"
+
+  # Port 80: redirect to 443 when cert present; forward directly when HTTP-only
+  ListenerHTTP:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - !If
+          - HasCertificate
+          - Type: redirect
+            RedirectConfig:
+              Protocol: HTTPS
+              Port: "443"
+              Host: "#{host}"
+              Path: "/#{path}"
+              Query: "#{query}"
+              StatusCode: HTTP_301
+          - Type: forward
+            TargetGroupArn: !Ref ALBTargetGroup
+
+  # Port 443: only created when CertificateArn is provided
+  ListenerHTTPS:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: HasCertificate
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # AUTO SCALING GROUP
+  # ══════════════════════════════════════════════════════════════════════════
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: IGWAttachment
+    # CloudFormation waits for cfn-signal from each new instance
+    CreationPolicy:
+      ResourceSignal:
+        Count: !Ref DesiredInstances
+        Timeout: PT25M        # 25 min: update + clone + npm build + start
+    # Rolling updates: replace one instance at a time, wait for signal
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+        PauseTime: PT20M
+        WaitOnResourceSignals: true
+    Properties:
+      AutoScalingGroupName: !Sub "${AWS::StackName}-asg"
+      LaunchTemplate:
+        LaunchTemplateId: !Ref EC2LaunchTemplate
+        Version: !GetAtt EC2LaunchTemplate.LatestVersionNumber
+      MinSize: !Ref MinInstances
+      MaxSize: !Ref MaxInstances
+      DesiredCapacity: !Ref DesiredInstances
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      TargetGroupARNs:
+        - !Ref ALBTargetGroup
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 600   # 10 min grace — covers npm install + build time
+      DefaultInstanceWarmup: 120
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-instance"
+          PropagateAtLaunch: true
+        - Key: Stack
+          Value: !Ref AWS::StackName
+          PropagateAtLaunch: true
+
+  # CPU target-tracking: scale out when avg CPU > 60%, scale in when it drops
+  CPUTargetTrackingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 60.0
+        DisableScaleIn: false
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # SSM DEPLOYMENT DOCUMENT
+  # Runs the deploy script on all running instances via SSM Run Command.
+  # GitHub Actions calls this document to deploy new code without SSH.
+  # ══════════════════════════════════════════════════════════════════════════
+
+  DeploySSMDocument:
+    Type: AWS::SSM::Document
+    Properties:
+      Name: !Sub "${AWS::StackName}-deploy"
+      DocumentType: Command
+      DocumentFormat: YAML
+      TargetType: /AWS::EC2::Instance
+      Content:
+        schemaVersion: "2.2"
+        description: "Pull latest code from GitHub and reload the CertPath app via PM2"
+        parameters:
+          Branch:
+            type: String
+            default: main
+            description: "Git branch to deploy"
+        mainSteps:
+          - action: aws:runShellScript
+            name: deploy
+            inputs:
+              runCommand:
+                - "#!/bin/bash"
+                - "set -euo pipefail"
+                - "echo '=== CertPath deploy started: '$(date)"
+                - "APP_DIR=/opt/certpath"
+                - "cd $APP_DIR"
+                - "git fetch origin"
+                - "git checkout {{ Branch }}"
+                - "git reset --hard origin/{{ Branch }}"
+                - "echo '=== Building frontend ==="
+                - "cd $APP_DIR/frontend && npm ci && npm run build"
+                - "echo '=== Installing backend deps ==="
+                - "cd $APP_DIR/backend && npm ci"
+                - "echo '=== Reloading PM2 ==="
+                - "pm2 reload certpath --update-env"
+                - "pm2 save"
+                - "echo '=== Deploy complete: '$(date)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OUTPUTS
+# ─────────────────────────────────────────────────────────────────────────────
+Outputs:
+
+  ALBURL:
+    Description: "App URL via the load balancer (before you add a custom domain)"
+    Value: !Sub "http://${ApplicationLoadBalancer.DNSName}"
+
+  ALBDNSName:
+    Description: "ALB DNS name — add a CNAME record on your domain pointing here"
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+    Export:
+      Name: !Sub "${AWS::StackName}-alb-dns"
+
+  ALBHostedZoneId:
+    Description: "ALB Canonical Hosted Zone ID — use with Route 53 Alias A records"
+    Value: !GetAtt ApplicationLoadBalancer.CanonicalHostedZoneID
+    Export:
+      Name: !Sub "${AWS::StackName}-alb-zone-id"
+
+  AutoScalingGroupName:
+    Description: "Auto Scaling Group name — used by the CI/CD deploy workflow"
+    Value: !Ref AutoScalingGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-asg-name"
+
+  DeploySSMDocumentName:
+    Description: "SSM document name — used by GitHub Actions to trigger deploys"
+    Value: !Ref DeploySSMDocument
+    Export:
+      Name: !Sub "${AWS::StackName}-ssm-deploy-doc"
+
+  LaunchTemplateId:
+    Description: "Launch Template ID"
+    Value: !Ref EC2LaunchTemplate
+    Export:
+      Name: !Sub "${AWS::StackName}-lt-id"
+
+  VpcId:
+    Description: "VPC ID created by this stack"
+    Value: !Ref VPC
+    Export:
+      Name: !Sub "${AWS::StackName}-vpc-id"
+
+  EC2SecurityGroupId:
+    Description: "EC2 Security Group ID — reference this if you add RDS in the same VPC"
+    Value: !Ref EC2SecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-sg-ec2-id"

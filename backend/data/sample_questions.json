@@ -1,0 +1,117 @@
+[
+  {
+    "question": "Which AWS service provides scalable object storage in the cloud?",
+    "options": [
+      {"label": "A", "text": "Amazon EC2"},
+      {"label": "B", "text": "Amazon S3"},
+      {"label": "C", "text": "Amazon RDS"},
+      {"label": "D", "text": "Amazon EBS"}
+    ],
+    "correct_answer": "B",
+    "explanation": "Amazon S3 (Simple Storage Service) is an object storage service that offers industry-leading scalability, data availability, security, and performance.",
+    "domain": "Cloud Technology",
+    "reference_url": "https://aws.amazon.com/s3/"
+  },
+  {
+    "question": "Which of the following is the AWS shared responsibility model concept that describes customer responsibility?",
+    "options": [
+      {"label": "A", "text": "Security OF the cloud"},
+      {"label": "B", "text": "Security IN the cloud"},
+      {"label": "C", "text": "Physical security of data centres"},
+      {"label": "D", "text": "Network infrastructure maintenance"}
+    ],
+    "correct_answer": "B",
+    "explanation": "In the AWS Shared Responsibility Model, customers are responsible for 'Security IN the cloud', which includes data, identity, and application-level security.",
+    "domain": "Security and Compliance",
+    "reference_url": "https://aws.amazon.com/compliance/shared-responsibility-model/"
+  },
+  {
+    "question": "Which pricing model allows customers to save up to 72% compared to On-Demand pricing in exchange for a 1 or 3 year commitment?",
+    "options": [
+      {"label": "A", "text": "Spot Instances"},
+      {"label": "B", "text": "Dedicated Hosts"},
+      {"label": "C", "text": "Reserved Instances"},
+      {"label": "D", "text": "On-Demand Instances"}
+    ],
+    "correct_answer": "C",
+    "explanation": "Reserved Instances provide a significant discount (up to 72%) compared to On-Demand pricing in exchange for a 1 or 3-year usage commitment.",
+    "domain": "Billing and Pricing",
+    "reference_url": "https://aws.amazon.com/ec2/pricing/reserved-instances/"
+  },
+  {
+    "question": "Which AWS service enables you to run code without provisioning or managing servers?",
+    "options": [
+      {"label": "A", "text": "Amazon EC2"},
+      {"label": "B", "text": "AWS Lambda"},
+      {"label": "C", "text": "Amazon ECS"},
+      {"label": "D", "text": "AWS Elastic Beanstalk"}
+    ],
+    "correct_answer": "B",
+    "explanation": "AWS Lambda lets you run code without provisioning or managing servers. You pay only for the compute time you consume.",
+    "domain": "Cloud Technology",
+    "reference_url": "https://aws.amazon.com/lambda/"
+  },
+  {
+    "question": "Which of the following are benefits of cloud computing? (Choose two.)",
+    "options": [
+      {"label": "A", "text": "Trade capital expense for variable expense"},
+      {"label": "B", "text": "Increased time to market due to manual provisioning"},
+      {"label": "C", "text": "Benefit from massive economies of scale"},
+      {"label": "D", "text": "Requires significant upfront hardware investment"}
+    ],
+    "correct_answer": "AC",
+    "question_type": "multi",
+    "max_selections": 2,
+    "explanation": "Key cloud computing benefits include trading capital expense for variable expense and benefiting from massive economies of scale achieved by cloud providers.",
+    "domain": "Cloud Concepts",
+    "reference_url": "https://aws.amazon.com/what-is-cloud-computing/"
+  },
+  {
+    "question": "Which of the following are pillars of the AWS Well-Architected Framework? (Choose two.)",
+    "options": [
+      {"label": "A", "text": "Availability"},
+      {"label": "B", "text": "Reliability"},
+      {"label": "C", "text": "Scalability"},
+      {"label": "D", "text": "Responsive design"},
+      {"label": "E", "text": "Performance Efficiency"}
+    ],
+    "correct_answer": "BE",
+    "question_type": "multi",
+    "max_selections": 2,
+    "explanation": "Reliability and Performance Efficiency are two of the six pillars of the AWS Well-Architected Framework.",
+    "domain": "Cloud Concepts",
+    "reference_url": "https://aws.amazon.com/architecture/well-architected/"
+  },
+  {
+    "question": "Which AWS services can be used to decouple application components? (Choose two.)",
+    "options": [
+      {"label": "A", "text": "Amazon SQS"},
+      {"label": "B", "text": "Amazon EC2"},
+      {"label": "C", "text": "Amazon SNS"},
+      {"label": "D", "text": "Amazon RDS"},
+      {"label": "E", "text": "Amazon S3"}
+    ],
+    "correct_answer": "AC",
+    "question_type": "multi",
+    "max_selections": 2,
+    "explanation": "Amazon SQS (Simple Queue Service) and Amazon SNS (Simple Notification Service) are messaging services used to decouple application components.",
+    "domain": "Cloud Technology",
+    "reference_url": "https://aws.amazon.com/sqs/"
+  },
+  {
+    "question": "Which of the following are characteristics of the AWS global infrastructure? (Choose three.)",
+    "options": [
+      {"label": "A", "text": "Regions"},
+      {"label": "B", "text": "Availability Zones"},
+      {"label": "C", "text": "Data silos"},
+      {"label": "D", "text": "Edge Locations"},
+      {"label": "E", "text": "Physical on-premises servers"}
+    ],
+    "correct_answer": "ABD",
+    "question_type": "multi",
+    "max_selections": 3,
+    "explanation": "The AWS global infrastructure is made up of Regions, Availability Zones, and Edge Locations. These provide redundancy, low latency, and global reach.",
+    "domain": "Cloud Concepts",
+    "reference_url": "https://aws.amazon.com/about-aws/global-infrastructure/"
+  }
+]

@@ -1,0 +1,57 @@
+# CertPath — Fly.io configuration (Dev)
+# App name matches what you create with: fly apps create certpath-dev
+
+app = 'certpath-dev'
+primary_region = 'lhr'   # London — change to nearest: ams, fra, cdg, jnb, etc.
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  NODE_ENV = 'production'
+  PORT = '3001'
+
+# Secrets (set via: fly secrets set KEY=value --app certpath-dev)
+# DATABASE_URL  — set from fly postgres attach or manually
+# JWT_SECRET    — fly secrets set JWT_SECRET=your-secret
+# ADMIN_EMAIL   — fly secrets set ADMIN_EMAIL=admin@yourdomain.com
+# ADMIN_PASSWORD
+# SUPER_EMAIL
+# SUPER_PASSWORD
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 3001
+  auto_stop_machines = true   # scale to zero when idle (saves cost)
+  auto_start_machines = true
+  min_machines_running = 0    # 0 = free when no traffic
+
+  [[services.ports]]
+    port = 80
+    handlers = ['http']
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ['tls', 'http']
+
+  [services.concurrency]
+    type = 'connections'
+    hard_limit = 100
+    soft_limit = 80
+
+  [[services.http_checks]]
+    interval = '15s'
+    timeout = '5s'
+    grace_period = '30s'
+    method = 'GET'
+    path = '/api/health'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '256mb'
+
+# Persistent volume for uploaded files (PDF, CSV)
+[[mounts]]
+  source = 'certpath_uploads'
+  destination = '/app/uploads'

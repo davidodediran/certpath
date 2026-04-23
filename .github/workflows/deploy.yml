@@ -1,0 +1,133 @@
+name: Deploy to Production
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TRIGGER
+# Runs automatically when a PR is merged into 'main'.
+# You can also trigger it manually from the GitHub Actions tab.
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches:
+      - main          # merge your dev / feature branch → main to deploy
+  workflow_dispatch:  # "Run workflow" button in GitHub Actions UI
+    inputs:
+      branch:
+        description: "Branch to deploy (default: main)"
+        required: false
+        default: main
+
+# Only one deploy runs at a time; new pushes cancel in-progress runs
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false   # never cancel an in-progress deploy; queue instead
+
+jobs:
+  deploy:
+    name: Deploy via SSM Run Command
+    runs-on: ubuntu-latest
+    environment: production     # optional: add approval gate in GitHub → Settings → Environments
+
+    steps:
+      # ── 1. Check out code (needed so we can read deploy metadata) ──────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Configure AWS credentials ───────────────────────────────────────
+      # Store these in GitHub → Settings → Secrets and variables → Actions:
+      #   AWS_ACCESS_KEY_ID      — IAM user key with SSM + EC2 permissions
+      #   AWS_SECRET_ACCESS_KEY  — matching secret
+      #   AWS_REGION             — e.g. eu-west-1
+      #   ASG_NAME               — from CloudFormation output: AutoScalingGroupName
+      #   SSM_DOCUMENT_NAME      — from CloudFormation output: DeploySSMDocumentName
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_REGION }}
+
+      # ── 3. Identify running EC2 instances in the ASG ───────────────────────
+      - name: Get ASG instance IDs
+        id: instances
+        run: |
+          INSTANCE_IDS=$(aws autoscaling describe-auto-scaling-groups \
+            --auto-scaling-group-names "${{ secrets.ASG_NAME }}" \
+            --query "AutoScalingGroups[0].Instances[?LifecycleState=='InService'].InstanceId" \
+            --output text | tr '\t' ',')
+
+          if [ -z "$INSTANCE_IDS" ]; then
+            echo "::error::No InService instances found in ASG ${{ secrets.ASG_NAME }}"
+            exit 1
+          fi
+
+          echo "instance_ids=$INSTANCE_IDS" >> $GITHUB_OUTPUT
+          echo "Found instances: $INSTANCE_IDS"
+
+      # ── 4. Send deploy command to all running instances via SSM ────────────
+      #    No SSH needed. The command runs deploy.sh on each instance.
+      - name: Run deploy via SSM
+        id: ssm
+        run: |
+          BRANCH="${{ github.event.inputs.branch || 'main' }}"
+
+          COMMAND_ID=$(aws ssm send-command \
+            --document-name "${{ secrets.SSM_DOCUMENT_NAME }}" \
+            --targets "Key=tag:aws:autoscaling:groupName,Values=${{ secrets.ASG_NAME }}" \
+            --parameters "Branch=$BRANCH" \
+            --comment "Deploy ${{ github.sha }} from GitHub Actions" \
+            --timeout-seconds 900 \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "command_id=$COMMAND_ID" >> $GITHUB_OUTPUT
+          echo "SSM Command ID: $COMMAND_ID"
+
+      # ── 5. Wait for SSM command to finish and report result ────────────────
+      - name: Wait for deploy to complete
+        run: |
+          COMMAND_ID="${{ steps.ssm.outputs.command_id }}"
+          echo "Waiting for SSM command $COMMAND_ID ..."
+
+          # Poll every 15 seconds, timeout after 15 minutes
+          for i in $(seq 1 60); do
+            STATUS=$(aws ssm list-command-invocations \
+              --command-id "$COMMAND_ID" \
+              --details \
+              --query "CommandInvocations[*].Status" \
+              --output text)
+
+            echo "[$i/60] Status: $STATUS"
+
+            # All instances must be Success; any Failure/Cancelled = fail the job
+            if echo "$STATUS" | grep -qiE "Failed|Cancelled|TimedOut"; then
+              echo "::error::Deploy failed on one or more instances."
+              aws ssm list-command-invocations \
+                --command-id "$COMMAND_ID" \
+                --details \
+                --query "CommandInvocations[*].{Instance:InstanceId,Status:Status,Output:CommandPlugins[0].Output}" \
+                --output table
+              exit 1
+            fi
+
+            # All Success?
+            PENDING=$(echo "$STATUS" | grep -icE "InProgress|Pending|Delayed" || true)
+            if [ "$PENDING" -eq 0 ]; then
+              echo "All instances deployed successfully."
+              break
+            fi
+
+            sleep 15
+          done
+
+      # ── 6. Print a summary ─────────────────────────────────────────────────
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "### Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SSM Command | \`${{ steps.ssm.outputs.command_id }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Time | $(date -u) |" >> $GITHUB_STEP_SUMMARY

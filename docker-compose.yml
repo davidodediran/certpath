@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: examapp
+      POSTGRES_USER: examuser
+      POSTGRES_PASSWORD: exampass
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U examuser -d examapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://examuser:exampass@db:5432/examapp
+      JWT_SECRET: change-this-secret-in-production-min-32-chars
+      ADMIN_EMAIL: admin@examapp.com
+      PORT: 3001
+    volumes:
+      - uploads_data:/app/uploads
+      - ./backend/data:/app/data
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      # Docker Compose: backend reachable via service name on internal network
+      BACKEND_URL: http://backend:3001
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  pg_data:
+  uploads_data:

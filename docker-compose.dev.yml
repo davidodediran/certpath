@@ -1,0 +1,25 @@
+version: '3.9'
+# Development override — adds hot-reload volumes
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  backend:
+    build:
+      context: ./backend
+      target: development
+    command: npx nodemon src/server.js
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/data:/app/data
+    environment:
+      NODE_ENV: development
+
+  frontend:
+    build:
+      context: ./frontend
+      target: development
+    command: npm run dev -- --host 0.0.0.0
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src

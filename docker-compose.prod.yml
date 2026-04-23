@@ -1,0 +1,29 @@
+# Production overrides — used with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Key differences from base docker-compose.yml:
+#   - DB port NOT exposed publicly (internal Docker network only)
+#   - Backend port NOT exposed publicly (Nginx handles all traffic)
+#   - Credentials come from .env file, not hardcoded
+
+services:
+  db:
+    ports: []                    # Remove 5432 from public — internal only
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+  backend:
+    ports: []                    # Remove 3001 from public — Nginx proxies internally
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      PORT: 3001
+
+  frontend:
+    environment:
+      BACKEND_URL: http://backend:3001
