@@ -50,7 +50,7 @@ SUPER_PASSWORD=""
 
 GITHUB_REPO="davidodediran/certpath"
 GITHUB_BRANCH="dev"
-APP_DIR="/opt/certpath"
+APP_DIR="~/certpath"
 APP_PORT="3001"
 NODE_ENV="production"
 
