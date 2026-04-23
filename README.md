@@ -38,6 +38,8 @@ CertPath lets students practice and sit timed mock exams for AWS certifications 
 
 ## Quick Start (Local)
 
+No accounts to create. No external database needed. Just Docker.
+
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose
@@ -50,55 +52,56 @@ git clone https://github.com/davidodediran/certpath.git
 cd certpath
 ```
 
-### 2. Configure environment
-
-```bash
-cp backend/.env.example backend/.env
-```
-
-Edit `backend/.env` and fill in your values (see [Environment Variables](#environment-variables)).
-
-### 3. Start the app
+### 2. Start the app
 
 ```bash
 docker compose up --build
 ```
 
-The app will be available at **http://localhost:3001**
+This starts the frontend, backend, and a local PostgreSQL database automatically.
 
-### 4. Run migrations (first run only)
+### 3. Run migrations (first run only)
 
 ```bash
-docker compose exec app node src/db/migrate.js
+docker compose exec backend node src/db/migrate.js
 ```
 
-This creates all tables and seeds your admin and superuser accounts.
+This creates all tables and seeds the default dev accounts.
+
+### 4. Open the app
+
+Visit **http://localhost** in your browser.
+
+### Default login credentials (local dev only)
+
+| Role | Login path | Email | Password |
+|---|---|---|---|
+| Admin | `/admin/login` | `admin@localhost.dev` | `admin1234` |
+| Superuser | `/superuser/login` | `super@localhost.dev` | `super1234` |
+| Student | `/login` | _(register via cohort code)_ | — |
+
+> These credentials are development defaults only. Never use them in production.
 
 ---
 
 ## Environment Variables
 
-Create `backend/.env` from the example file:
+The `docker-compose.yml` already has all variables pre-filled for local development — **no `.env` file needed to get started**.
 
-```env
-NODE_ENV=development
-PORT=3001
+If you are running the backend outside of Docker (e.g. native Node.js or EC2), copy the example file and fill in your values:
 
-# PostgreSQL connection string
-DATABASE_URL=postgresql://postgres:password@db:5432/certpath
-
-# JWT signing secret — generate with:
-# node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-JWT_SECRET=
-
-# Admin account (seeded on first migration run)
-ADMIN_EMAIL=
-ADMIN_PASSWORD=
-
-# Superuser account (seeded on first migration run)
-SUPER_EMAIL=
-SUPER_PASSWORD=
+```bash
+cp backend/.env.example backend/.env
 ```
+
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `JWT_SECRET` | Random string min 32 chars — `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
+| `ADMIN_EMAIL` | Admin account email (seeded on first migration) |
+| `ADMIN_PASSWORD` | Admin account password |
+| `SUPER_EMAIL` | Superuser account email (seeded on first migration) |
+| `SUPER_PASSWORD` | Superuser account password |
 
 > **Never commit your `.env` file.** It is already in `.gitignore`.
 
