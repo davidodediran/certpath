@@ -19,22 +19,21 @@ except ImportError:
 # ─────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────
-PDF_PASSWORD = "sthithapragnasya@gmail.com"
 OUTPUT_PATH = os.path.join(os.path.dirname(__file__), "..", "backend", "data", "questions.json")
 
 PDFS = [
     {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\1.1-987.pdf",       "password": None,         "format": "multi"},
-    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\2.988-1115.pdf",     "password": None,         "format": "multi"},
-    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\3.1116-1207.pdf",    "password": None,         "format": "multi"},
-    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\4.1208-1284-DEC-JAN-2024.pdf", "password": None, "format": "multi"},
-    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\5.1285-1361-JAN-2024.pdf", "password": None,   "format": "multi"},
-    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\6.APRIL-2024.pdf",   "password": PDF_PASSWORD, "format": "one_per_two"},
-    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\7.MAY-2024.pdf",     "password": PDF_PASSWORD, "format": "one_per_two"},
-    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\8.MAY-JUNE-2024.pdf","password": PDF_PASSWORD, "format": "one_per_two"},
-    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\9.JUNE-2024.pdf",    "password": PDF_PASSWORD, "format": "one_per_two"},
-    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\10.JULY-2024.pdf",   "password": PDF_PASSWORD, "format": "one_per_two"},
-    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\11.AUG-2024.pdf",    "password": PDF_PASSWORD, "format": "one_per_two"},
-    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\12.SEP-2024.pdf",    "password": PDF_PASSWORD, "format": "one_per_two"},
+    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\2.988.pdf",     "password": None,         "format": "multi"},
+    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\3.1116.pdf",    "password": None,         "format": "multi"},
+    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\4.1208.pdf", "password": None, "format": "multi"},
+    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\5.1285.pdf", "password": None,   "format": "multi"},
+    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\6.APRIL.pdf",   "password": None, "format": "one_per_two"},
+    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\7.MAY.pdf",     "password": None, "format": "one_per_two"},
+    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\8.MAY.pdf", "password": None, "format": "one_per_two"},
+    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\9.JUNE.pdf",    "password": None, "format": "one_per_two"},
+    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\10.JULY.pdf",   "password": None, "format": "one_per_two"},
+    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\11.AUG.pdf",    "password": None, "format": "one_per_two"},
+    {"path": r"C:\Users\USER\Music\AWS\CLF-C02_ AWS Certified Cloud Practitioner\12.SEP.pdf",    "password": None, "format": "one_per_two"},
 ]
 
 # ─────────────────────────────────────────────
